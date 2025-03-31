@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: frontend_${STACK_ID:-default}
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+      - REACT_APP_API_BASE_URL=http://localhost:${BACKEND_PORT:-5000}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    command: ["npm", "start"]
+    depends_on:
+      - app
+    networks:
+      - network_default
+    restart: unless-stopped
+
+  app:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend_${STACK_ID:-default}
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    environment:
+      - COUCHDB_URL=http://couchdb_${STACK_ID:-default}:5984/
+      - COUCHDB_DB=sys_tool
+      - COUCHDB_USER=admin
+      - COUCHDB_PASSWORD=admin123hjy
+      - JWT_TOKEN_KEY=123456789oiuytredgj7890@@gh675%
+      - FRONTEND_URL=http://localhost:${FRONTEND_PORT:-3000}/
+      - PORT=5000
+      - REDIS_URL=redis_${STACK_ID:-default}
+    ports:
+      - "${BACKEND_PORT:-5000}:5000"
+    depends_on:
+      couchdb:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - network_default
+    restart: unless-stopped
+
+  couchdb:
+    image: couchdb:3.4
+    container_name: couchdb_${STACK_ID:-default}
+    environment:
+      - COUCHDB_USER=admin
+      - COUCHDB_PASSWORD=admin123hjy
+      - COUCHDB_CLUSTER_Q=1
+      - COUCHDB_CLUSTER_N=1
+    ports:
+      - "${COUCHDB_PORT:-5984}:5984"
+    volumes:
+      - couchdb-data_default:/opt/couchdb/data
+    networks:
+      - network_default
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:5984/_up"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:latest
+    container_name: redis_${STACK_ID:-default}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data_default:/data
+    networks:
+      - network_default
+    restart: unless-stopped
+
+volumes:
+  couchdb-data_default:
+  redis-data_default:
+
+networks:
+  network_default:
